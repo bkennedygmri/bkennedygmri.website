@@ -1,0 +1,207 @@
+---
+title: "Figures"
+---
+
+
+```{r setup, include=FALSE}
+
+library(ggmap)
+library(tidyverse)
+library(ggrepel)
+library(viridis)
+library(ggthemes)
+library(cowplot)
+
+```
+
+##Basic Iterations of Map Layers for the Community Reports 
+There are many, many approaches for our 'map' figure. As we discussed last week, I think our goal here is:
+
+*  Show the extent of the Northeast Shelf (i.e. the study area) by displaying the communities involved, the spatial area examined, and the hint at our motif: climate vulnerability. 
+*  Include plenty of of space to overlay text and one-off graphic like text bubbles or inset figures a la the venerable Island Institute figure. 
+*  Use the 'map' to call-out the COCA ports and introduce the idea of **Four Focus Communities**. 
+
+The plots below are a very rough attempt at generating a base-map to build a report visual on top of. There are a ton of extra things that can be done:
+
+*  Abstract away from a map via heat map or scatter plot
+*  Introduce a layer showing the spatial extent of the Northeast Shelf LME. 
+*  The **NCA 'Coasts' Section' has a ton of good examples**: https://nca2014.globalchange.gov/report/regions/coasts#intro-section-2
+
+
+```{r cnty fill data input, include=FALSE}
+
+####MAP WITH FILL DATA
+library(ggmap)
+library(maps)
+
+#read in geocoded cfders port names
+geo_coded <- read.csv(
+  "C:/Users/brian/Dropbox/COCA--diversity/Community data/data/data_geocoded_portnames.csv")
+
+#create dataset for points 
+coca_port_list <- geo_coded %>% 
+  filter(port_tidy %in% c("STONINGTON_ME", "PORTLAND_ME", "NEWBEDFORD_MA", "POINTJUDITH_RI")) %>%
+  mutate(port_nice = c("New Bedford, MA", "Point Judith, RI", "Stonington, ME", "Portland, ME"))
+
+#importint table w/ fips code and other info 
+geo_table <- as_tibble(read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/geo_table.csv"))
+
+cfders_port_name <- read.csv(
+    "C:/Users/brian/Dropbox/COCA--diversity/Community data/data/cfders_port_names.csv")
+
+#the byport landings dataset
+landings <- read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/byport_thin.csv") %>%
+  left_join(., geo_table, by = "PORT_CODE") %>% 
+  filter(between(YEAR, 2011,2015)) %>% na.omit(port_tidy) %>% 
+  mutate(
+    county_pad =  sprintf("%03d", CountyFIPS),  #inserting 0 in COUNTY
+    fips_geo = as.numeric(paste0(StateFIPS,county_pad))) %>%  #joinable w/ map
+  group_by(fips_geo) %>% 
+  summarise(
+    value = mean(value))
+
+#reading in county fips names from ggmap
+countyfipscodes <- as_tibble(maps::county.fips) %>% 
+  separate(polyname, c("state", "county"), sep = ",")
+
+#reading in cnty shapefile from ggmap
+cnty <- as_tibble(map_data("county"))
+
+#merging the fips names with the shape file (county names by county names)
+map_cnty <- left_join(cnty, countyfipscodes, by = c("region" = "state", "subregion" = "county")) %>% 
+  rename( gg_state = region,  gg_cnty = subregion)
+
+#merging the cnty shapefile and fips names WITH our landings dataset,
+#excluding counties w/ no landings
+cnty_input_data <- left_join(map_cnty, landings, by = c("fips" = "fips_geo")) %>% 
+  drop_na(value)
+
+##state base layer shapefile, trimmed to relevant states
+state_data <- as_tibble(map_data("state")) %>% 
+  rename(state_group = group, state_order = order) %>% 
+  filter(region %in% c("maine", "new hampshire", "massachusetts", 
+                       "vermont", "rhode island", "connecticut", "new york", "new jersey",
+                       "pennsylvania", "delaware", "maryland", "district of columbia", "virginia", 
+                       "north carolina"))
+
+```
+
+####County Fills 
+Counties w/ commercial ports are filled with 'average annual landings' as a sample data set and plotted on our base map. Vulnerability, diversity, impact could all be used as fills assuming we can aggregate up to the county level. The legend is deliberately excluded. 
+
+```{r fill w/ croppeds, echo=FALSE, fig.cap="Un-cropped and cropped base maps with county fill"}
+##creating basic map with states as base layer and counties w/ value fill
+##fills can easily be changed out
+
+###whole NORTHEAST SHELF 
+big <- ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               color = "black", alpha = .05)+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value)) +
+  scale_fill_viridis() +
+  coord_fixed(1.3, xlim = c(-77, -66.5), ylim = c(45, min(geo_coded$lat))) + 
+  theme_map() + 
+  theme(legend.position = "none")
+
+###cropped
+small <- ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               color = "black", alpha = .05)+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value)) +
+  scale_fill_viridis() +
+  coord_fixed(1.3, xlim = c(-77, -66.5), ylim =c(45, 40.2)) + 
+  theme_map() + 
+  theme(legend.position = "none")
+
+
+
+cowplot::plot_grid(big,small, nrow = 1)
+
+```
+
+###
+
+```{r different fills (all cropped), echo=FALSE, warning=FALSE, fig.cap="cropped base maps with different fill options"}
+
+####cropped / dff fill color 
+a <- ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               color = "black", alpha = .05)+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value)) +
+  scale_fill_continuous_tableau() +
+  coord_fixed(1.3, xlim = c(-77, -66.5), ylim =c(45, 40.2)) + 
+  theme_map() + 
+  theme(legend.position = "none")
+
+####cropped / ANOTHER dff fill color 
+b <- ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               color = "black", alpha = .05)+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value), alpha = .6) +
+  scale_fill_gradient(low="yellow", high="red") +
+  coord_fixed(1.3, xlim = c(-77, -66.5), ylim =c(45, 40.2)) + 
+  theme_map() + 
+  theme(legend.position = "none")
+
+c <- ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               color = "black", alpha = .05)+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value), alpha = .6) +
+  scale_fill_gradient(low="papayawhip", high="navy") +
+  coord_fixed(1.3, xlim = c(-77, -66.5), ylim =c(45, 40.2)) + 
+  theme_map() + 
+  theme(legend.position = "none")
+
+
+###with COCA ports labeled
+d <- ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               color = "black", alpha = .05)+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value), alpha = .5) +
+  geom_point(data = coca_port_list, aes(lon, lat),
+             size = 2, color = "red") +
+  ggrepel::geom_text_repel(data = coca_port_list, aes(x=lon, y=lat, label=port_nice),
+                           direction = "both",
+                           hjust = 1,
+                           nudge_x = 10,
+                           nudge_y = -1,
+                           size = 2.7, #size of box?
+                           segment.size = .3) +
+  scale_fill_viridis(option = "inferno") +
+  coord_fixed(1.3, xlim = c(-77, -66.5), ylim =c(45, 40.2)) + 
+  theme_map() + 
+  theme(legend.position = "none")
+
+
+cowplot::plot_grid(a,b,c,d, nrow = 2)
+
+```
+
+#####Treemap Figure, Portland Maine Example
+Ideally, if we are trying to describe vulnerability, we could use the same fill here as the map.
+
+```{r treemaps, echo=FALSE, warning=FALSE}
+library(treemapify)
+library(treemap)
+gear_spp_input <- read.csv("C:/Users/brian/Dropbox/COCA--diversity/Community data/data/gear_spp_input.csv")
+
+
+ggplot(gear_spp_input, aes(area = value, fill = value, label = spp_top,
+                           subgroup = gear_type)) + 
+  geom_treemap(alpha = .7) +
+  geom_treemap_text(colour = "black", place = "center", reflow = T) +
+  geom_treemap_subgroup_border() + 
+  geom_treemap_subgroup_text(place = "topleft", alpha = 0.9, colour =
+                               "white", fontface = "italic") +
+  scale_fill_viridis() +
+    labs(fill = "Value") +
+      theme_tufte()
+
+```
+

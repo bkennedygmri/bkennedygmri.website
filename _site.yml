@@ -1,0 +1,9 @@
+name: "Brian Work"
+output_dir: "."
+navbar:
+  title: "Current Work: Brian Kennedy / GMRI"
+  left:
+    - text: "Home"
+      href: index.html
+    - text: "Community Report Figures"
+      href: comm_report.html
