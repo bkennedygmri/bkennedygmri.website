@@ -1,0 +1,255 @@
+---
+title: "Southern New England Lobster Inquiry"
+output: 
+  html_document:
+    theme: journal
+---
+
+```{r data input, echo=FALSE, warning=FALSE, include=FALSE}
+
+library(ggmap)
+library(maps)
+library(tidyverse)
+library(cowplot)
+library(ggthemes)
+library(formattable)  
+library(kableExtra)
+library(viridis)
+
+options(scipen = 999)  #turning off scientific notation to control # of digits
+##LME SPECIES DATA 
+lme_state <- as_tibble(read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/NMFS_state_annual.csv", header = TRUE)) %>%
+  dplyr::select(year = Year, state = State, spp = Species, value = value_2009) %>% 
+  mutate( mega_subregion = case_when(                                    #creating region names
+    state %in% c('Maine', 'New Hampshire') ~ 'N. New England',
+    state %in% c('Massachusetts','Rhode Island', 'Connecticut', 'New York') ~ 'S. New England',
+    state %in% c('New Jersey', 'Delaware', 'Maryland', 'Virginia', 'North Carolina') ~ 'Mid Atlantic'),
+    mega_subregion = factor(mega_subregion, 
+                            levels = c("N. New England", "S. New England",
+                                       "Mid Atlantic"))) %>% drop_na(mega_subregion, value) %>% 
+      filter(year > 1980) %>% 
+  group_by(year, mega_subregion) %>% mutate(total_value = sum(value)) %>% ungroup() %>% #total value
+     mutate(lobster = case_when(
+                          spp == "LOBSTER_AMERICAN" ~ "Lobster",
+                          !spp == "LOBSTER_AMERICAN" ~ "Other")) %>%   #creating lobster variable
+        group_by(year, lobster, mega_subregion) %>%       #calculating percent value and other stuff 
+          mutate(
+            value = sum(value),
+            perc_value = value / total_value) %>% 
+              distinct(year, value, perc_value, lobster)  ##taking what we need 
+
+##READING IN PORT LEVEL DATA:: WARNING ONLY RELIABLE FOR PORT TIME SERIES, V PATCHY OTHERWISE 
+
+#read in geocoded cfders port names
+geo_coded <- read.csv(
+  "C:/Users/brian/Dropbox/COCA--diversity/Community data/data/data_geocoded_portnames.csv") %>% 
+    select(-port_tidy)
+
+#importint table w/ fips code and other info 
+geo_table <- as_tibble(read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/geo_table.csv")) %>% 
+  filter(Sub_Region %in% c("New York", "Connecticut","Rhode Island", 
+                           "Massachusetts New Bedford Coast","Massachusetts Cape & Islands")) %>% 
+    left_join(., geo_coded, by =c("PORT_CODE" = "PORT")) %>% 
+      mutate(lat = replace(lat, port_tidy == "NANTUCKET_MA", 41.2835),
+             lon = replace(lon, port_tidy == "NANTUCKET_MA", 70.0995))
+      
+
+
+cfders_port_name <- read.csv(
+  "C:/Users/brian/Dropbox/COCA--diversity/Community data/data/cfders_port_names.csv")
+
+#the byport landings dataset
+
+raw_landings <- read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/byport_thin.csv") %>%
+    left_join(., geo_table, by = "PORT_CODE") %>% drop_na(port_tidy) %>% 
+      filter(between(YEAR,1996,2015))
+
+landings <- raw_landings %>% 
+  na.omit() %>% 
+    group_by(YEAR, port_tidy) %>% 
+      mutate(Species = case_when(
+                          SPECIES == "LOBSTER,AMERICAN" ~ "Lobster",
+                          !SPECIES == "LOBSTER,AMERICAN" ~ "Other"),
+             total_value = sum(value),
+             total_lbs = sum(lbs)) %>% 
+        group_by(YEAR, port_tidy, Species) %>% 
+          mutate(
+              value = sum(value),
+              lbs = sum(lbs),
+              perc_value = (value / total_value),
+              perc_lbs = lbs / total_lbs) %>% 
+                  dplyr::distinct(YEAR, lat, port_tidy, Species, value, lbs, 
+                                  total_value, total_lbs, perc_value, perc_lbs) %>% 
+                  filter(Species == "Lobster") %>% 
+                    ungroup() %>% group_by(port_tidy) %>% #checking yr_cnt
+                      mutate(
+                        yrcnt = n_distinct(YEAR)) %>% 
+                            filter(yrcnt == 20, max(perc_value) > 0.1,  #year_num and max value filters
+                                   !port_tidy == "MONTAUK_NY")
+
+###TUFTE SPARKLINE
+
+#taking only what we need 
+landings_spark <- landings %>% dplyr::select(
+  YEAR, port_tidy, perc_value, lat) %>% rename(year = YEAR) %>% 
+  ungroup() %>% 
+      mutate(   ##attempting to order by factor
+        port_tidy = fct_reorder(port_tidy, lat), .desc = FALSE
+      )
+
+mins <- landings_spark %>% group_by(port_tidy) %>% mutate(min = min(perc_value)) %>% 
+ filter(perc_value == min) %>% mutate( min = round(min, digits = 2))
+
+max <- landings_spark %>% group_by(port_tidy) %>% mutate(max = max(perc_value)) %>% 
+ filter(perc_value == max)%>% mutate( max = round(max, digits = 2))
+
+ends <- landings_spark %>% group_by(port_tidy) %>% filter(year == max(year)) %>% 
+  mutate( perc_value = round(perc_value, digits = 2))
+
+quarts <- landings_spark %>% group_by(port_tidy) %>% 
+  summarise(
+    q25 = quantile(perc_value, .25),
+    q75 = quantile(perc_value, .75)) %>% 
+      right_join(landings_spark)
+
+```
+
+###Southern New England Lobster Landings Change
+From 1985 - 2015 American lobster landings increased signficantly by value. However, the share of value associated with landigns from **Southern New England** declined starting in the mid-1990s. This quick report describes landings trends on shelf-wide, regional, and port scales. **Southern New England** is defined as: 
+
+*  Massachusetts 
+*  Rhode Island, 
+*  Connecticut 
+*  New York 
+
+
+```{r regional contribution to lobster value, echo=FALSE, warning=FALSE}
+
+##area chart regional contribution to lobster landings
+landings_area <- lme_state %>% 
+  filter(lobster == "Lobster") %>% 
+  group_by(year, mega_subregion) %>% 
+    summarise(
+      value = sum(value))
+    
+
+ggplot(landings_area, aes(x=year, y=value/1000000, fill=mega_subregion)) +
+  geom_area(alpha = 0.5,size=.7, colour="black") + 
+    labs(fill = "Region") +
+      scale_y_continuous(name = "Landings Value (mil. of $)", labels = scales::dollar) +
+      scale_x_continuous(limits = c(1985, 2014), breaks = seq(1985, 2014, by = 5)) + 
+        scale_fill_viridis(discrete = TRUE) +
+          theme_tufte(base_size = 12) +
+          ggtitle("Northeast Shelf American lobster Landings: 1985 - 2014") + 
+            theme(axis.title.y = element_blank(),
+                  legend.position = "bottom",
+                  aspect.ratio = .6)
+
+
+```
+
+
+###Regional Assessment
+More specific geographic areas are not possible with the NMFS annual landings data set used here. The LANPORT data set does offer the ability to define local areas (i.e. Southern Mass), but it is not reliable on an aggregate scale due to missing data. 
+
+
+```{r regional trend figure, echo = FALSE, warning=FALSE}
+
+regional_input <- lme_state %>% 
+  filter(lobster == "Lobster", mega_subregion == "S. New England",year > 1984) %>% 
+    ungroup()
+
+min_r <-   regional_input %>% mutate(min = min(perc_value)) %>% 
+ filter(perc_value == min) 
+
+max_r <- regional_input %>% mutate(max = max(perc_value)) %>% 
+ filter(perc_value == max)
+
+max_value <- regional_input %>% mutate(max = max(value)) %>% 
+ filter(value == max)
+
+min_value <-   regional_input %>% mutate(min = min(value)) %>% 
+ filter(value == min) 
+
+end_r <- regional_input %>% filter(year == max(year))
+
+
+##percent
+perc <- ggplot(data = regional_input, 
+       aes(year, perc_value)) +
+    geom_line(size = 0.5) +
+  geom_point(data = max_r, col = 'blue') + 
+  geom_point(data = min_r, col = 'red') + 
+  geom_point(data = end_r, col = 'black') + 
+  scale_x_continuous(limits = c(1985, 2018), breaks = seq(1985, 2015, by = 5)) +
+  scale_y_continuous(labels = scales::percent) + 
+  geom_text(data = min_r, aes(label = scales::percent(min)), vjust = -1.3) +
+  geom_text(data = max_r, aes(label = scales::percent(max)), hjust = 1.2, vjust = 0.4) + 
+  geom_text(data = end_r, aes(label = scales::percent(perc_value)), hjust = -.3, vjust = 0.4) + 
+  ggtitle("Lobster Landings as % of Total Regional Landings Value",
+          subtitle = "Southern New England: 1985 - 2014") + 
+    theme_tufte() + 
+      theme(aspect.ratio = .5,
+            axis.title = element_blank())
+
+##value
+value <- ggplot(data = regional_input, 
+       aes(year, value)) +
+    geom_line(size = 0.5) +
+  geom_point(data = max_value, col = 'blue') + 
+  geom_point(data = min_value, col = 'red') + 
+  geom_point(data = end_r, col = 'black') + 
+  scale_x_continuous(limits = c(1985, 2018), breaks = seq(1985, 2015, by = 5)) +
+  scale_y_continuous(labels = scales::dollar) +
+  geom_text(data = min_value, aes(label = scales::dollar(value)), vjust = -1) +
+  geom_text(data = max_value, aes(label = scales::dollar(value)), hjust = 1.1, vjust = 0.2) + 
+  geom_text(data = end_r, aes(label = scales::dollar(value)), hjust = -.1, vjust = 0.1) + 
+  ggtitle("Total Regional Lobster Landings (2009 Dollars)",
+          subtitle = "Southern New England: 1985 - 2014") + 
+    theme_tufte()  + 
+      theme(aspect.ratio = .5,
+            axis.title = element_blank())
+  
+cowplot::plot_grid(value, perc, nrow = 2)
+
+
+```
+
+###Port-Level Assessment 
+Using the LANPORT data set I try to see if the trend observed at the regional level is seen at the port scale as well. I calculate the percent of port value attributed to Lobster from 1995 - 2015 at the port-level. Ports displayed are selected due to the following criteria: 
+
+*  Located in Southern New England. 
+*  Continuous landings record from 1995 - 2015.
+*  Lobster landings made up 10% of total landings at least once in the data set. 
+
+
+
+```{r, echo=FALSE, warning=FALSE, fig.height= 6}
+
+ggplot(landings_spark, aes(x=year, y=perc_value)) + 
+  scale_x_continuous(breaks = c(1995, 2005, 2015)) +
+  facet_grid(port_tidy ~ ., scales = "free_y") + 
+  geom_ribbon(data = quarts, aes(ymin = q25, ymax = q75), fill = "grey70",
+              alpha = .7) + 
+  geom_line(size = 0.4) + 
+  geom_point(data = mins, col = 'red') +
+  geom_point(data = max, col = 'blue') + 
+  geom_point(data = ends, col = 'black') + 
+  geom_text(data = mins, aes(label = scales::percent(min)), vjust = -1) +
+  geom_text(data = max, aes(label = scales::percent(max)), vjust = 1.5) +
+  geom_text(data = ends, aes(label = scales::percent(perc_value)),
+            hjust = 0, nudge_x = .7) +
+  geom_text(data = ends, aes(label = port_tidy), hjust = 0, nudge_x = 2.3) + 
+  geom_vline(xintercept = seq(1996,2015, by = 3), alpha = .1) +
+  expand_limits(x = max(landings_spark$year) + 
+      (0.5 * (max(landings_spark$year) - landings_spark$year)),
+      y = c(max(landings_spark$perc_value) + 0.05, -0.1)) + 
+  theme_tufte(base_size = 12) +
+    ggtitle("Port Lobster Landings as % of Total Value ",
+          subtitle = "Select Southern New England Ports: 1995 - 2015 / Arranged South - North") + 
+  theme(axis.title=element_blank(), axis.text.y = element_blank(), 
+        axis.ticks = element_blank(), strip.text = element_blank())
+
+
+```
+

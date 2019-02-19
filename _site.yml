@@ -7,3 +7,8 @@ navbar:
       href: index.html
     - text: "Community Report Figures"
       href: comm_report.html
+    - text: "Lobster Trends"
+      href: lobster_trend.html
+output: 
+  html_document:
+    theme: journal

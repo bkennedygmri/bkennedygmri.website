@@ -1,5 +1,8 @@
 ---
 title: "Figures"
+output: 
+  html_document:
+    theme: journal
 ---
 
 
