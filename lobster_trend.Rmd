@@ -91,7 +91,7 @@ landings <- raw_landings %>%
 
 #taking only what we need 
 landings_spark <- landings %>% dplyr::select(
-  YEAR, port_tidy, perc_value, lat) %>% rename(year = YEAR) %>% 
+  YEAR, port_tidy, perc_value, value, lat) %>% rename(year = YEAR) %>% 
   ungroup() %>% 
       mutate(   ##attempting to order by factor
         port_tidy = fct_reorder(port_tidy, lat), .desc = FALSE
@@ -100,11 +100,18 @@ landings_spark <- landings %>% dplyr::select(
 mins <- landings_spark %>% group_by(port_tidy) %>% mutate(min = min(perc_value)) %>% 
  filter(perc_value == min) %>% mutate( min = round(min, digits = 2))
 
+mins_v <- landings_spark %>% group_by(port_tidy) %>% mutate(min = min(value)) %>% 
+ filter(value == min) %>% mutate( min = round(min, digits = 0))
+
 max <- landings_spark %>% group_by(port_tidy) %>% mutate(max = max(perc_value)) %>% 
  filter(perc_value == max)%>% mutate( max = round(max, digits = 2))
 
+max_v <- landings_spark %>% group_by(port_tidy) %>% mutate(max = max(value)) %>% 
+ filter(value == max) %>% mutate( max = round(max, digits = 0))
+
 ends <- landings_spark %>% group_by(port_tidy) %>% filter(year == max(year)) %>% 
-  mutate( perc_value = round(perc_value, digits = 2))
+  mutate( perc_value = round(perc_value, digits = 2),
+          value = round(value), digits = 0)
 
 quarts <- landings_spark %>% group_by(port_tidy) %>% 
   summarise(
@@ -112,9 +119,17 @@ quarts <- landings_spark %>% group_by(port_tidy) %>%
     q75 = quantile(perc_value, .75)) %>% 
       right_join(landings_spark)
 
+quarts_v <- landings_spark %>% group_by(port_tidy) %>% 
+  summarise(
+    q25 = quantile(value, .25),
+    q75 = quantile(value, .75)) %>% 
+      right_join(landings_spark)
+
 ```
 
-###Southern New England Lobster Landings Change
+
+
+##Southern New England Lobster Landings Change
 From 1985 - 2015 American lobster landings increased signficantly by value. However, the share of value associated with landigns from **Southern New England** declined starting in the mid-1990s. This quick report describes landings trends on shelf-wide, regional, and port scales. **Southern New England** is defined as: 
 
 *  Massachusetts 
@@ -149,11 +164,11 @@ ggplot(landings_area, aes(x=year, y=value/1000000, fill=mega_subregion)) +
 ```
 
 
-###Regional Assessment
+##Regional Assessment
 More specific geographic areas are not possible with the NMFS annual landings data set used here. The LANPORT data set does offer the ability to define local areas (i.e. Southern Mass), but it is not reliable on an aggregate scale due to missing data. 
 
 
-```{r regional trend figure, echo = FALSE, warning=FALSE}
+```{r regional trend figure, echo = FALSE, warning=FALSE, fig.width=10}
 
 regional_input <- lme_state %>% 
   filter(lobster == "Lobster", mega_subregion == "S. New England",year > 1984) %>% 
@@ -210,21 +225,56 @@ value <- ggplot(data = regional_input,
       theme(aspect.ratio = .5,
             axis.title = element_blank())
   
-cowplot::plot_grid(value, perc, nrow = 2)
+cowplot::plot_grid(value, perc, nrow = 1)
 
 
 ```
 
-###Port-Level Assessment 
+## Port-Level Assessment  {.tabset}
+
 Using the LANPORT data set I try to see if the trend observed at the regional level is seen at the port scale as well. I calculate the percent of port value attributed to Lobster from 1995 - 2015 at the port-level. Ports displayed are selected due to the following criteria: 
 
 *  Located in Southern New England. 
 *  Continuous landings record from 1995 - 2015.
 *  Lobster landings made up 10% of total landings at least once in the data set. 
+*  Grey bars indicate mean values
 
 
+### By Total Value
 
-```{r, echo=FALSE, warning=FALSE, fig.height= 6}
+```{r, echo=FALSE, warning=FALSE, fig.height= 8}
+
+ggplot(landings_spark, aes(x=year, y=value)) + 
+  scale_x_continuous(breaks = c(1995, 2005, 2015)) +
+  facet_grid(port_tidy ~ ., scales = "free_y") + 
+  geom_ribbon(data = quarts_v, aes(ymin = q25, ymax = q75), fill = "grey70",
+              alpha = .7) + 
+  geom_line(size = 0.4) + 
+  geom_point(data = mins_v, col = 'red') +
+  geom_point(data = max_v, col = 'blue') + 
+  geom_point(data = ends, col = 'black') + 
+  geom_text(data = mins_v, aes(label = scales::dollar(min)), vjust = -1) +
+  geom_text(data = max_v, aes(label = scales::dollar(max)), vjust = 1.5) +
+  geom_text(data = ends, aes(label = scales::dollar(value)),
+            hjust = 0, nudge_x = .7) +
+  geom_text(data = ends, aes(label = port_tidy), hjust = 0, nudge_x = 4.4) + 
+  geom_vline(xintercept = seq(1996,2015, by = 3), alpha = .1) +
+  expand_limits(x = max(landings_spark$year) + 
+      (0.5 * (max(landings_spark$year) - landings_spark$year)),
+      y = (max(landings_spark$year) + (max(landings_spark$year) * .4) -
+            landings_spark$year)) + 
+  theme_tufte(base_size = 12) +
+    ggtitle("Port Lobster Landings",
+          subtitle = "Select Southern New England Ports: 1995 - 2015 / Arranged South - North") + 
+  theme(axis.title=element_blank(), axis.text.y = element_blank(), 
+        axis.ticks = element_blank(), strip.text = element_blank())
+
+```
+
+
+### By Percent Value
+
+```{r, echo=FALSE, warning=FALSE, fig.height= 8}
 
 ggplot(landings_spark, aes(x=year, y=perc_value)) + 
   scale_x_continuous(breaks = c(1995, 2005, 2015)) +
@@ -239,7 +289,7 @@ ggplot(landings_spark, aes(x=year, y=perc_value)) +
   geom_text(data = max, aes(label = scales::percent(max)), vjust = 1.5) +
   geom_text(data = ends, aes(label = scales::percent(perc_value)),
             hjust = 0, nudge_x = .7) +
-  geom_text(data = ends, aes(label = port_tidy), hjust = 0, nudge_x = 2.3) + 
+  geom_text(data = ends, aes(label = port_tidy), hjust = 0, nudge_x = 2.2) + 
   geom_vline(xintercept = seq(1996,2015, by = 3), alpha = .1) +
   expand_limits(x = max(landings_spark$year) + 
       (0.5 * (max(landings_spark$year) - landings_spark$year)),
@@ -249,7 +299,6 @@ ggplot(landings_spark, aes(x=year, y=perc_value)) +
           subtitle = "Select Southern New England Ports: 1995 - 2015 / Arranged South - North") + 
   theme(axis.title=element_blank(), axis.text.y = element_blank(), 
         axis.ticks = element_blank(), strip.text = element_blank())
-
 
 ```
 
