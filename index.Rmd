@@ -1,8 +1,93 @@
 ---
-title: "Best Car Ever Made"
+title: "PIONEERING THE BEST CHANGE"
 ---
+<br />
+<br />
 
 
+```{r, echo=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(ggthemes)
+library(viridis)
+
+wmaine <- as_tibble(
+  read.csv("C:/Users/brian/Dropbox/SURF/r/urrt/daily western maine 2017.csv")) %>% 
+    separate(., date, c("month", "day", "year"), by = "/") %>% 
+      mutate(
+        month_num = as.numeric(as.character(month)),
+        day_num = as.numeric(as.character(day)),
+        year_num = as.numeric(as.character(year))) %>% 
+  na.omit()
+
+ggplot(wmaine, aes(x = id, y= height)) +
+  geom_line(color = "black") + 
+  geom_line(data = wmaine, aes(x = id, y= interval), color = "red") +
+    theme_tufte() +
+      theme(axis.title = element_blank(), axis.ticks = element_blank(),
+            axis.text = element_blank())
+
+annual_stats <- wmaine %>% 
+  group_by(year) %>% 
+  summarise(
+    mean_height = mean(height),
+    mean_interval = mean(interval),
+    sd_height = sd(height))
+
+      
+coord_comp <- function(a, b) ##processing function
+{
+  a <- a/2
+  b <- b/2
+  
+  tibble(
+    a = c(10 - a, 10 - a,  ##four x coordinates 
+          10 + a, 10 + a),
+    b = c(10 - b, 10 + b,  ##four y coordinates, note differing arrangement 
+          10 + b, 10 - b))
+}
 
 
-![Best Car Ever Made?](/Users/brian/Dropbox/COCA--diversity/webzz/gnaR_work/1985-Honda-Civic-Wagon.jpg){width=600px}
+input <- wmaine %>% filter(month == 1) ###time frame chosen
+
+###input dataset
+january <-  input %>% group_by(id) %>% 
+  do(data.frame(x = coord_comp(.$interval, .$height))) %>% 
+  left_join(., input, by = "id") %>% 
+    left_join(., annual_stats, by = "year") %>% 
+  rename(x = x.a, y = x.b) %>% 
+    mutate(
+      diff_from = height / mean_height
+    ) %>% 
+    arrange(id)
+
+allyr <-  wmaine %>% group_by(id) %>% 
+  do(data.frame(x = coord_comp(.$interval, .$height))) %>% 
+  left_join(., wmaine, by = "id") %>% 
+  left_join(., annual_stats, by = "year") %>% 
+  rename(x = x.a, y = x.b) %>% 
+  mutate(
+    diff_from = height / mean_height
+  ) %>% 
+  arrange(id)
+
+ good_fall <- allyr %>% filter(id >= 244) %>% filter(id <= 361) %>% 
+   ggplot(., aes(x=x, y=y, fill=air_temp))+
+   geom_polygon(alpha = .5, color = 'black') +
+   scale_fill_viridis() +  
+   ylim(0, 20) + xlim(0, 20) +
+   facet_wrap(~id, nrow = 9) +
+   theme_map() +
+   theme(strip.text = element_blank(),
+         panel.background = element_blank(),
+         axis.text = element_blank(), axis.ticks = element_blank(),
+         axis.title.x = element_blank(),
+         axis.title.y = element_blank(), 
+         legend.position = "none")
+```
+
+
+```{r, echo=FALSE, warning=FALSE}
+good_fall
+```
+
+
