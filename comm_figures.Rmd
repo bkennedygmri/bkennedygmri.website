@@ -55,7 +55,7 @@ quarts_p <- landings_spark_port %>% group_by(port_tidy) %>%
       right_join(landings_spark_port)
 
 
-landings_plot <- ggplot(data = landings_spark_port, 
+plot.landings_min <- ggplot(data = landings_spark_port, 
        aes(year, total_value)) +
 #  geom_ribbon(data = quarts_p, aes(ymin = q25, ymax = q75), fill = "grey70", alpha = .7) + 
     geom_line(size = 0.7) +
@@ -75,7 +75,26 @@ landings_plot <- ggplot(data = landings_spark_port,
             panel.grid.major.y = element_line( size=.1, color="grey70"),
             panel.grid.major.x = element_line( size=.1, color="grey70")
             )
-  
+
+plot.landings_area <- ggplot(data = landings_spark_port, 
+       aes(year, total_value/1000000)) +
+#  geom_ribbon(data = quarts_p, aes(ymin = q25, ymax = q75), fill = "grey70", alpha = .7) + 
+    geom_area(fill = "#35B779FF", alpha = .5, colour = "black", size = 1.1) +
+#  geom_point(data = max_vp, col = 'blue') + 
+ # geom_point(data = mins_vp, col = 'red') + 
+  #geom_point(data = ends_p, col = 'black') + 
+  scale_x_continuous(limits = c(1982, 2020), breaks = seq(min(landings_spark_port$year), 2015, by = 8)) +
+  scale_y_continuous(labels = scales::dollar) +
+  #geom_text(data = mins_vp, aes(label = scales::dollar(total_value)), vjust = -1) +
+  #geom_text(data = max_vp, aes(label = scales::dollar(total_value)), hjust = 1.1, vjust = 0.2) + 
+  #geom_text(data = ends_p, aes(label = scales::dollar(total_value)), hjust = -.1, vjust = 0.1) + 
+  ylab("Millions of $") + 
+  ggtitle("Annual Landings Value",
+          subtitle = "PORT OF INTEREST: 1982 - 2015") + 
+    theme_tufte() + 
+      theme(axis.title.x = element_blank(),
+            aspect.ratio = .3)
+          
 
 
 ```
@@ -181,7 +200,22 @@ treemap <- ggplot(gear_spp_input, aes(area = value, label = spp_top,
                                "black", fontface = "italic") +
     labs(fill = "Value") +
       theme_tufte()
+
+treemap_fill <- ggplot(gear_spp_input, aes(area = value, label = spp_top,
+                           subgroup = gear_type, fill =value )) + 
+  geom_treemap(alpha = .65, colour = "grey70") +
+  geom_treemap_text(colour = "white", place = "center", reflow = T) +
+  geom_treemap_subgroup_border(colour = "white", alpha = .7) + 
+  geom_treemap_subgroup_text(place = "topleft", alpha = 0.8, colour =
+                               "black", fontface = "italic") +
+  scale_fill_viridis(option = "magma") + 
+    labs(fill = "Climate Exposure") +
+  ggtitle("Climate Exposure by Gear Type and Species",
+          subtitle = "Computed using 2011 - 2015 Values / Area Proportional to Value") +
+      theme_tufte() + 
+        theme(legend.position = "bottom")
 ```
+
 
 
 
@@ -191,10 +225,25 @@ map
 
 ```
 
-```{r landings, echo=FALSE, warning=FALSE, fig.width= 8}
+## Landings Figures  {.tabset}
 
-landings_plot
+### Minimal
+
+```{r landings_min, echo=FALSE, warning=FALSE, fig.width= 8}
+
+plot.landings_min
 ```
+
+### Area 
+
+```{r landings_area, echo=FALSE, warning=FALSE, fig.width= 8}
+
+plot.landings_area
+```
+
+## Port Composition {.tabset}
+
+### No fill type
 
 ```{r treemap, echo=FALSE, warning=FALSE}
 
@@ -202,5 +251,10 @@ treemap
 
 ```
 
+### Faux Vulnerability
 
+```{r treemap_fill, echo=FALSE, warning=FALSE}
 
+treemap_fill
+
+```
