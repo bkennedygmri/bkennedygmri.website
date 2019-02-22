@@ -1,0 +1,206 @@
+---
+title: "Community Report: Page 1 Figures"
+output: 
+  html_document:
+    theme: journal
+---
+
+```{r ladings, include=FALSE, warning=FALSE}
+library(ggmap)
+library(maps)
+library(tidyverse)
+library(viridis)
+library(ggthemes)
+
+
+
+
+#importint table w/ fips code and other info 
+geo_table <- as_tibble(read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/geo_table.csv"))
+
+
+
+raw_landings <- read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/byport_thin.csv") %>%
+    left_join(., geo_table, by = "PORT_CODE") %>% drop_na(port_tidy) 
+
+port_landings <- raw_landings %>% 
+  filter(port_tidy == "PORTLAND_ME") %>% 
+  na.omit() %>% 
+    group_by(YEAR, port_tidy) %>% 
+      summarise(
+             total_value = sum(value),
+             total_lbs = sum(lbs))
+  
+
+###TUFTE SPARKLINE
+
+#taking only what we need 
+landings_spark_port <- port_landings %>% dplyr::select(
+  port_tidy, YEAR, total_value) %>% rename(year = YEAR)
+
+
+mins_vp <- landings_spark_port %>% group_by(port_tidy) %>% mutate(min = min(total_value)) %>% 
+ filter(total_value == min) %>% mutate( min = round(min, digits = 0))
+
+max_vp <- landings_spark_port %>% group_by(port_tidy) %>% mutate(max = max(total_value)) %>% 
+ filter(total_value == max) %>% mutate( max = round(max, digits = 0))
+
+ends_p <- landings_spark_port %>% group_by(port_tidy) %>% filter(year == max(year)) %>% 
+  mutate( total_value = round(total_value), digits = 0)
+
+quarts_p <- landings_spark_port %>% group_by(port_tidy) %>% 
+  summarise(
+    q25 = quantile(total_value, .25),
+    q75 = quantile(total_value, .75)) %>% 
+      right_join(landings_spark_port)
+
+
+landings_plot <- ggplot(data = landings_spark_port, 
+       aes(year, total_value)) +
+#  geom_ribbon(data = quarts_p, aes(ymin = q25, ymax = q75), fill = "grey70", alpha = .7) + 
+    geom_line(size = 0.7) +
+  geom_point(data = max_vp, col = 'blue') + 
+  geom_point(data = mins_vp, col = 'red') + 
+  geom_point(data = ends_p, col = 'black') + 
+  scale_x_continuous(limits = c(1982, 2020), breaks = seq(min(landings_spark_port$year), 2015, by = 8)) +
+  scale_y_continuous(labels = scales::dollar) +
+  geom_text(data = mins_vp, aes(label = scales::dollar(total_value)), vjust = -1) +
+  geom_text(data = max_vp, aes(label = scales::dollar(total_value)), hjust = 1.1, vjust = 0.2) + 
+  geom_text(data = ends_p, aes(label = scales::dollar(total_value)), hjust = -.1, vjust = 0.1) + 
+  ggtitle("Annual Landings Value",
+          subtitle = "PORT OF INTEREST: 1982 - 2015") + 
+    theme_tufte()  + 
+      theme(axis.title = element_blank(),
+            aspect.ratio = .3,
+            panel.grid.major.y = element_line( size=.1, color="grey70"),
+            panel.grid.major.x = element_line( size=.1, color="grey70")
+            )
+  
+
+
+```
+
+
+
+```{r map data, include=FALSE, warning=FALSE}
+####MAP WITH FILL DATA
+
+#read in geocoded cfders port names
+geo_coded <- read.csv(
+  "C:/Users/brian/Dropbox/COCA--diversity/Community data/data/data_geocoded_portnames.csv")
+
+#create dataset for points 
+coca_port_list <- geo_coded %>% 
+  filter(port_tidy %in% c("STONINGTON_ME", "PORTLAND_ME", "NEWBEDFORD_MA", "POINTJUDITH_RI")) %>%
+  mutate(port_nice = c("New Bedford, MA", "Point Judith, RI", "Stonington, ME", "Portland, ME"))
+
+#importint table w/ fips code and other info 
+geo_table <- as_tibble(read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/geo_table.csv"))
+
+cfders_port_name <- read.csv(
+    "C:/Users/brian/Dropbox/COCA--diversity/Community data/data/cfders_port_names.csv")
+
+#the byport landings dataset
+landings <- read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/byport_thin.csv") %>%
+  left_join(., geo_table, by = "PORT_CODE") %>% 
+  filter(between(YEAR, 2011,2015)) %>% na.omit(port_tidy) %>% 
+  mutate(
+    county_pad =  sprintf("%03d", CountyFIPS),  #inserting 0 in COUNTY
+    fips_geo = as.numeric(paste0(StateFIPS,county_pad))) %>%  #joinable w/ map
+  group_by(fips_geo) %>% 
+  summarise(
+    value = mean(value))
+
+#reading in county fips names from ggmap
+countyfipscodes <- as_tibble(maps::county.fips) %>% 
+  separate(polyname, c("state", "county"), sep = ",")
+
+#reading in cnty shapefile from ggmap
+cnty <- as_tibble(map_data("county"))
+
+#merging the fips names with the shape file (county names by county names)
+map_cnty <- left_join(cnty, countyfipscodes, by = c("region" = "state", "subregion" = "county")) %>% 
+  rename( gg_state = region,  gg_cnty = subregion)
+
+#merging the cnty shapefile and fips names WITH our landings dataset,
+#excluding counties w/ no landings
+cnty_input_data <- left_join(map_cnty, landings, by = c("fips" = "fips_geo")) %>% 
+  drop_na(value)
+
+##state base layer shapefile, trimmed to relevant states
+state_data <- as_tibble(map_data("state")) %>% 
+  rename(state_group = group, state_order = order) %>% 
+  filter(region %in% c("maine", "new hampshire", "massachusetts", 
+                       "vermont", "rhode island", "connecticut", "new york", "new jersey",
+                       "pennsylvania", "delaware", "maryland", "district of columbia", "virginia", 
+                       "north carolina"))
+
+```
+
+
+
+
+```{r landings trend, echo=FALSE, warning=FALSE, include=FALSE}
+map <- ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               alpha = .15, colour = "white")+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value), alpha = .5, colour = "white") +
+  geom_point(data = coca_port_list, aes(lon, lat),
+             size = 2, color = "red") +
+  ggrepel::geom_text_repel(data = coca_port_list, aes(x=lon, y=lat, label=port_nice),
+                           direction = "both",
+                           hjust = 1,
+                           nudge_x = 10,
+                           nudge_y = -1,
+                           size = 2.7, #size of box?
+                           segment.size = .3) +
+  scale_fill_viridis() +
+  coord_fixed(1.3, xlim = c(-77, -66.5), ylim =c(45, 40.2)) + 
+  theme_map() + 
+  theme(legend.position = "none")
+
+  
+```
+
+
+
+```{r area chart, echo=FALSE, warning=FALSE, include=FALSE}
+library(treemapify)
+library(tidyverse)
+
+gear_spp_input <- read.csv("C:/Users/brian/Dropbox/COCA--diversity/Community data/data/gear_spp_input.csv")
+
+
+treemap <- ggplot(gear_spp_input, aes(area = value, label = spp_top,
+                           subgroup = gear_type), fill = "red") + 
+  geom_treemap(alpha = .4, colour = "white", fill = "#35B779FF") +
+  geom_treemap_text(colour = "white", place = "center", reflow = T) +
+  geom_treemap_subgroup_border(colour = "black") + 
+  geom_treemap_subgroup_text(place = "topleft", alpha = 0.9, colour =
+                               "black", fontface = "italic") +
+    labs(fill = "Value") +
+      theme_tufte()
+```
+
+
+
+```{r map, echo=FALSE, warning=FALSE}
+
+map
+
+```
+
+```{r landings, echo=FALSE, warning=FALSE, fig.width= 8}
+
+landings_plot
+```
+
+```{r treemap, echo=FALSE, warning=FALSE}
+
+treemap
+
+```
+
+
+

@@ -5,10 +5,13 @@ navbar:
   left:
     - text: "Home"
       href: index.html
-    - text: "Community Report Figures"
+    - text: "COCA Map Iterations"
       href: comm_report.html
+    - text: "Community Report Figures" 
+      href: comm_figures.html
     - text: "Lobster Trends"
       href: lobster_trend.html
+  
 output: 
   html_document:
     theme: journal
