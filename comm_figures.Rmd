@@ -216,6 +216,132 @@ treemap_fill <- ggplot(gear_spp_input, aes(area = value, label = spp_top,
         theme(legend.position = "bottom")
 ```
 
+```{r top 3 species data, echo=FALSE, warning=FALSE, include=FALSE }
+# Brian Kennedy 
+# Top 5 species Area Chart for the Community Report
+# We read in raw landings data for ports
+# create function that IDs top 5 ports, allows plotting of '0' values 
+# outputs data files including top 5 species and total trend
+# creates faceted area plot of total + top 5 species
+
+# packages necessary 
+
+library(tidyverse)
+library(cowplot)
+require(ggthemes)
+
+# reading in 'geo' reference dataset
+
+geo.table <- as_tibble(read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/geo_table.csv"))
+
+# reading in raw landings data and joining with the geo dataset / need to change out to actual raw landings
+
+raw.landings <- read.csv("C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/byport_thin.csv") %>%
+  left_join(., geo.table, by = "PORT_CODE") %>% drop_na(port_tidy) %>% 
+    filter(YEAR > 1994) %>% 
+      dplyr::select(YEAR, SPECIES, value, port_tidy) %>% 
+        na.omit()
+
+
+# GMRI color palettes for figures
+gmri.blue <- "#00608A"  #  using external rgb calc to get hexadecimal
+gmri.gray <- rgb(.233, .233, .233)
+
+
+
+area_chart <- function(port.name, n)
+# Creates input dataset for top 'x' area chart and outputs area chart
+#  Args: 
+#      port.name: port used to generate query    
+#      n: the 'x' in top 'x'  
+
+  {
+
+# Filtering the raw landings dataset 
+raw.landings.filter <- raw.landings %>% 
+  filter(port_tidy == port.name)
+  
+# all species time series for the totals table
+total.port <- raw.landings.filter %>% 
+  group_by(port_tidy, YEAR) %>% 
+    summarise(
+      value = sum(value)) %>% 
+        mutate(spp.names = "total") %>% 
+          rename(yr.column = YEAR)
+    
+
+# table that identifies top 5 spp over the 2011 - 2015 baseline 
+top.species <- raw.landings.filter %>% 
+  filter(between(YEAR,2011,2015)) %>% 
+  group_by(port_tidy, SPECIES) %>% 
+    summarise(
+      mean_value = mean(value)
+    ) %>% ungroup() %>%  
+  top_n(n, mean_value) %>%  
+  arrange(desc(mean_value)) %>% 
+    distinct(port_tidy, SPECIES)
+
+# Dealing with top spp that do not have values in a given year by 
+# creating dataframe w/ all years for every species
+
+# creating a year column
+years <- c(seq(min(raw.landings.filter$YEAR), 
+               max(raw.landings.filter$YEAR), by = 1)) #vector to run through
+# calling out unique names of the 'top species
+spp <- unique(top.species$SPECIES)
+# length of unique species 
+n.spp <- length(spp)
+
+# creating three columns of equal length
+
+# creating column with the length years * distinct spp
+yr.column <- sort(as.numeric(rep(years, n.spp))) #  note: ordering vector 
+# creating a 0 row = number of years 
+blank.values <- as.numeric(rep(0, length(yr.column)))
+# creating column of spp names equal in length of years
+spp.names <-  as.character(rep(spp, length(years)))
+
+# binding all three columns to create our 'fake dataset' 
+out <- data.frame(cbind(yr.column, blank.values, spp.names)) %>% 
+  mutate(yr.column = as.numeric(as.character(yr.column)),
+         blank.values = as.numeric(as.character(blank.values)))
+
+
+# Landings table for top spp. note using the 'fake dataset to insert 0s where needed
+top.spp.landings <- raw.landings.filter %>% 
+  filter(SPECIES %in% top.species$SPECIES) %>% 
+    group_by(port_tidy, YEAR, SPECIES) %>%
+      full_join(out,., by = c( "yr.column" = "YEAR", "spp.names" = "SPECIES")) %>% 
+        mutate_if(is.numeric, funs(ifelse(is.na(.), 0, .)))
+
+
+# dataset for figure input, merging total landings row w/ top spp landings table
+figure.input <-   bind_rows(top.spp.landings, total.port) %>% 
+  left_join(total.port, top.spp.landings, by = c("yr.column")) %>% 
+    dplyr::select(yr.column, value = value.x, total.value = value.y, 
+                  spp.names = spp.names.x) %>% 
+  mutate(spp.names = as.factor(spp.names))
+
+# Changing order of plots 
+figure.input$spp.names <-  fct_reorder(figure.input$spp.names, figure.input$value, mean,
+                            .desc = TRUE)
+
+# generating faceted area plot
+
+ggplot() + 
+    geom_area(data = figure.input, aes(yr.column, total.value / 1000000),
+              fill = gmri.gray, alpha = .4, color = "black", size = .5)  + 
+  geom_area(data = figure.input, aes(yr.column, value / 1000000),
+            fill = gmri.blue, alpha = .9, color = "black", size = .5) + 
+    facet_wrap(spp.names ~., nrow = 2) + 
+    scale_x_continuous(breaks = c(min(yr.column), 2005, max(yr.column))) +
+    ylab("Millions of $") + 
+      theme_tufte() + 
+      theme(aspect.ratio = .7, 
+            axis.title.x = element_blank())
+}      
+
+```
 
 
 
@@ -239,7 +365,39 @@ plot.landings_min
 ```{r landings_area, echo=FALSE, warning=FALSE, fig.width= 8}
 
 plot.landings_area
+
 ```
+
+## Top Species {.tabset}
+
+### Stonington
+```{r area stonington, echo=FALSE, warning=FALSE, fig.width= 5}
+
+area_chart("STONINGTON_ME", 3)
+
+```
+
+### Portland
+```{r area portland, echo=FALSE, warning=FALSE, fig.width= 5}
+
+area_chart("PORTLAND_ME", 3)
+
+```
+
+### Point Judith
+```{r area pj, echo=FALSE, warning=FALSE, fig.width= 5}
+
+area_chart("POINTJUDITH_RI", 3)
+
+```
+
+### New Bedford 
+```{r area nb, echo=FALSE, warning=FALSE, fig.width= 5}
+
+area_chart("NEWBEDFORD_MA", 3)
+
+```
+
 
 ## Port Composition {.tabset}
 
