@@ -118,7 +118,7 @@ just.gear <- gear_spp_input %>% group_by(gear_type) %>%
 
 ## Goal: 
 
-Produce figures for page 1 of the final report. The figures should have consistent formatting and allow for the right 'flow' of information as the reader progresses across the page. 
+Produce figures for page 1 of the final report. The figures should have consistent formatting and allow for the right 'flow' of information as the reader progresses across the page. While these figures have come a long way, there are still a bunch of small (and medium-ish things) that need be fixed i.e. legend formatting, fill direction and magnitude, titles, and data considerations. I think is a good start however re: the look and content that may make up the report. 
 
 ## Formatting Considerations
 
