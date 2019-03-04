@@ -9,9 +9,10 @@
 <meta name="generator" content="pandoc" />
 
 
+<meta name="author" content="Brian Kennedy" />
 
 
-<title>Figures</title>
+<title>comm_figures_2</title>
 
 <script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -305,49 +306,62 @@ $(document).ready(function () {
 
 
 
-<h1 class="title toc-ignore">Figures</h1>
+<h1 class="title toc-ignore">comm_figures_2</h1>
+<h4 class="author"><em>Brian Kennedy</em></h4>
+<h4 class="date"><em>March 4, 2019</em></h4>
 
 </div>
 
 
-<div id="basic-iterations-of-map-layers-for-the-community-reports" class="section level2">
-<h2>Basic Iterations of Map Layers for the Community Reports</h2>
-<p>There are many, many approaches for our ‘map’ figure. As we discussed last week, I think our goal here is:</p>
+<div id="goal" class="section level2">
+<h2>Goal:</h2>
+<p>Produce figures for page 1 of the final report. The figures should have consistent formatting and allow for the right ‘flow’ of information as the reader progresses across the page.</p>
+</div>
+<div id="formatting-considerations" class="section level2">
+<h2>Formatting Considerations</h2>
 <ul>
-<li>Show the extent of the Northeast Shelf (i.e. the study area) by displaying the communities involved, the spatial area examined, and the hint at our motif: climate vulnerability.</li>
-<li>Include plenty of of space to overlay text and one-off graphic like text bubbles or inset figures a la the venerable Island Institute figure.</li>
-<li>Use the ‘map’ to call-out the COCA ports and introduce the idea of <strong>Four Focus Communities</strong>.</li>
+<li>Text: All figures are <em>roboto condensed</em></li>
+<li>Palette: I tried to implement the GMRI color scale as per Elijah. At this stage this just means a continuous or discrete palette between gray and blue. Saturation / transparency was hard to dial and varies across the document</li>
+<li>Borders: I tried to go with a white borders on major plot elements</li>
 </ul>
-<p>The plots below are a very rough attempt at generating a base-map to build a report visual on top of. There are a ton of extra things that can be done:</p>
-<ul>
-<li>Abstract away from a map via heat map or scatter plot</li>
-<li>Introduce a layer showing the spatial extent of the Northeast Shelf LME.</li>
-<li>The <strong>NCA ‘Coasts’ Section’ has a ton of good examples</strong>: <a href="https://nca2014.globalchange.gov/report/regions/coasts#intro-section-2" class="uri">https://nca2014.globalchange.gov/report/regions/coasts#intro-section-2</a></li>
-</ul>
-<div id="county-fills" class="section level4">
-<h4>County Fills</h4>
-<p>Counties w/ commercial ports are filled with ‘average annual landings’ as a sample data set and plotted on our base map. Vulnerability, diversity, impact could all be used as fills assuming we can aggregate up to the county level. The legend is deliberately excluded.</p>
-<div class="figure">
-<img src="comm_report_files/figure-html/fill%20w/%20croppeds-1.png" alt="Un-cropped and cropped base maps with county fill" width="672" />
-<p class="caption">
-Un-cropped and cropped base maps with county fill
-</p>
+</div>
+<div id="landings" class="section level2">
+<h2>Landings</h2>
+<p>Simple area chart of annual landings w/ the baseline period treated with a distinct fill.</p>
+<p><strong>Data</strong>: LANPORT / GAR 82_2015</p>
+<p><img src="comm_page1_files/figure-html/landings%20trend-1.png" width="672" /></p>
+</div>
+<div id="top-species" class="section level2">
+<h2>Top Species</h2>
+<p>Bar Plot of the ‘Top 4’ species + ‘Other’</p>
+<p><strong>Data</strong>: LANPORT / GAR 82_2015, this can be changed to CFDERS easily</p>
+<p><img src="comm_page1_files/figure-html/bar%20plot-1.png" width="672" /></p>
+</div>
+<div id="treemaps" class="section level2 tabset">
+<h2>Treemaps</h2>
+<div id="gear-and-species" class="section level3">
+<h3>Gear and Species</h3>
+<p>Tree map built from avg. landings value across the baseline period. I have concerns that the species sub-group is TMI and complicates our bar chart.</p>
+<p><strong>Data</strong>: CFDERS 2011 - 2015</p>
+<p><img src="comm_page1_files/figure-html/treemap%20gear%20spp-1.png" width="672" /></p>
+</div>
+<div id="just-gear" class="section level3">
+<h3>Just Gear</h3>
+<p>Tree map built from avg. landings value across the baseline period. Species subgroup is excluded here.</p>
+<p><strong>Data</strong>: CFDERS 2011 - 2015</p>
+<p><img src="comm_page1_files/figure-html/treemap%20just%20gear-1.png" width="672" /></p>
 </div>
 </div>
-<div id="section" class="section level3">
-<h3></h3>
-<div class="figure">
-<img src="comm_report_files/figure-html/different%20fills%20(all%20cropped)-1.png" alt="cropped base maps with different fill options" width="672" />
-<p class="caption">
-cropped base maps with different fill options
-</p>
+<div id="scatterplot" class="section level2">
+<h2>Scatterplot</h2>
+<p>Scatter plot with catch diversity and log transformed Avg. Value. I have excluded axis values here.</p>
+<p><img src="comm_page1_files/figure-html/scatterplot-1.png" width="672" /></p>
 </div>
-<div id="treemap-figure-portland-maine-example" class="section level5">
-<h5>Treemap Figure, Portland Maine Example</h5>
-<p>Ideally, if we are trying to describe vulnerability, we could use the same fill here as the map.</p>
-<p><img src="comm_report_files/figure-html/treemaps-1.png" width="672" /></p>
-</div>
-</div>
+<div id="map" class="section level2">
+<h2>Map</h2>
+<p>Basic baseman. Palette has been reversed.</p>
+<p><strong>Data</strong>: LANPORT / GAR 82_2015 + default GGMAP categories</p>
+<p><img src="comm_page1_files/figure-html/map-1.png" width="672" /></p>
 </div>
 
 

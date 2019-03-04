@@ -1,0 +1,287 @@
+---
+title: "comm_figures_2"
+author: "Brian Kennedy"
+date: "March 4, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggrepel)
+library(viridis)
+library(tidyverse)
+library(cowplot)
+library(ggthemes)
+library(extrafont)
+library(treemapify)
+
+options(scipen = 999) 
+
+# directory for r scripts / functions
+code.path <- "C:/Users/brian/Dropbox/COCA--diversity/Community data/scripts/"
+
+# directory for datasets
+data.path <- "C:/Users/brian/Dropbox/COCA/DATA/GMRI_aggregated data/"
+
+# directory for datasets
+image.path <- "C:/Users/brian/Dropbox/COCA--diversity/Community data/figures/"
+
+# directory for community report datasets (need to merge)
+commdata.path <-  "C:/Users/brian/Dropbox/COCA--diversity/Community data/data/"
+
+geo.table <- as_tibble(read.csv(paste(data.path,"geo_table.csv", sep = "")))
+
+port.geocode <- as_tibble(read.csv(paste(commdata.path,"data_geocoded_portnames.csv", sep = ""))) 
+
+# reading in raw landings data and joining with the geo dataset / need to change out to actual raw landings
+
+raw.landings <- as_tibble(read.csv(paste(data.path,"byport_thin.csv", sep = ""))) %>%
+  left_join(., geo.table, by = "PORT_CODE") %>% drop_na(port_tidy) 
+
+raw.landings.trimmed <- raw.landings %>% 
+  dplyr::select(YEAR, SPECIES, value, port_tidy) %>% 
+  na.omit()
+
+# reading in function that creates time series w/ top n species 
+
+source(paste(code.path, "topp_spp_function.R", sep = ""))
+
+# reading in sheet with nicely formatted names for species and ports
+nice.names <- read.csv(paste(commdata.path,"nice_names.csv", sep=""))
+
+# avg. values for baseline period
+portland <- top_spp(raw.landings.trimmed, "PORTLAND_ME", 4, 2011,2015) %>% 
+  left_join(., nice.names, by = "spp.top") %>% 
+  filter(between(yr.column, 2011,2015)) %>% 
+  group_by(spp.nice) %>% 
+    summarise(
+      avg.value = mean(value)) %>% 
+          ungroup() %>% 
+        mutate(total.avg.value = sum(avg.value),
+               perc.value = avg.value / total.avg.value) %>% 
+          coord.barz(.) %>%  #  calling function to make label coordingates
+            mutate(y.label = paste(round(y*100, digits = 0),"%")) 
+
+# total annual landings for all species 
+portland.total <- top_spp(raw.landings.trimmed, "PORTLAND_ME", 5, 2011,2015) %>% 
+  group_by(yr.column) %>% 
+  summarise(
+    total.value = sum(value))
+
+
+# MAP DATA the byport landings dataset
+map.landings <- raw.landings %>% 
+  filter(between(YEAR, 2011,2015)) %>% na.omit(port_tidy) %>% 
+  left_join(.,nice.names, by = c("port_tidy" = "port.tidy")) %>% 
+  mutate(
+    county_pad =  sprintf("%03d", CountyFIPS),  #inserting 0 in COUNTY
+    fips_geo = as.numeric(paste0(StateFIPS,county_pad))) %>%  #joinable w/ map
+  group_by(fips_geo) %>% 
+  summarise(
+    value = mean(value))
+
+# reading in county fips names from ggmap
+countyfipscodes <- as_tibble(maps::county.fips) %>% 
+  separate(polyname, c("state", "county"), sep = ",")
+
+# reading in cnty shapefile from ggmap
+cnty <- as_tibble(map_data("county"))
+
+# merging the fips names with the shape file (county names by county names)
+map_cnty <- left_join(cnty, countyfipscodes, by = c("region" = "state", "subregion" = "county")) %>% 
+  rename( gg_state = region,  gg_cnty = subregion)
+
+# merging the cnty shapefile and fips names WITH our landings dataset,
+#excluding counties w/ no landings
+cnty_input_data <- left_join(map_cnty, map.landings, by = c("fips" = "fips_geo")) %>% 
+  drop_na(value)
+
+# state base layer shapefile, trimmed to relevant states
+state_data <- as_tibble(map_data("state")) %>% 
+  rename(state_group = group, state_order = order) %>% 
+  filter(region %in% c("maine", "new hampshire", "massachusetts", 
+                       "vermont", "rhode island", "connecticut", "new york", "new jersey",
+                       "pennsylvania", "delaware", "maryland", "district of columbia", "virginia", 
+                       "north carolina"))
+
+#create dataset for points 
+coca_port_list <- port.geocode %>% 
+  left_join(., nice.names, by = c("port_tidy" = "port.tidy")) %>% 
+      distinct(lon, lat, port.nice) %>% drop_na(port.nice)
+
+
+gear_spp_input <- read.csv("C:/Users/brian/Dropbox/COCA--diversity/Community data/data/gear_spp_input.csv")
+
+just.gear <- gear_spp_input %>% group_by(gear_type) %>% 
+  summarise(value = sum(value))
+
+```
+
+## Goal: 
+
+Produce figures for page 1 of the final report. The figures should have consistent formatting and allow for the right 'flow' of information as the reader progresses across the page. 
+
+## Formatting Considerations
+
+*  Text: All figures are *roboto condensed* 
+*  Palette: I tried to implement the GMRI color scale as per Elijah. At this stage this just means a continuous or discrete palette between gray and blue. Saturation / transparency was hard to dial and varies across the document 
+*  Borders: I tried to go with a white borders on major plot elements
+
+
+## Landings
+
+Simple area chart of annual landings w/ the baseline period treated with a distinct fill. 
+
+**Data**: LANPORT / GAR 82_2015 
+
+
+```{r landings trend, echo=FALSE, warning=FALSE}
+ggplot(data = portland.total, 
+                             aes(yr.column, total.value/1000000)) +
+  geom_area(fill = gmri.gray, alpha = .6, colour = "white", size = 0.1) +
+  geom_area(data = portland.total %>% filter(yr.column > 2010),
+            fill = gmri.blue, alpha = .8, colour = "white", size = 1.05) +
+  geom_line(colour = "white", size = .8) +
+  scale_x_continuous(limits = c(1982, 2020), breaks = seq(min(portland.total$yr.column), 2015, by = 8)) +
+  scale_y_continuous(labels = scales::dollar) +
+  ylab("Millions of $") + 
+ # ggtitle("Annual Landings Value",
+  #        subtitle = "PORT OF INTEREST: 1982 - 2015") + 
+  theme_tufte() + 
+  theme(axis.title.x = element_blank(),
+        text = element_text(family = "Roboto Condensed"),
+        aspect.ratio = .2)  
+```
+
+## Top Species
+
+Bar Plot of the 'Top 4' species + 'Other' 
+
+**Data**: LANPORT / GAR 82_2015, this can be changed to CFDERS easily 
+
+
+```{r bar plot, echo=FALSE, warning=FALSE}
+
+ggplot() + 
+  geom_bar(data = portland, aes(x =1, y = perc.value, fill = 
+                                  fct_reorder( spp.nice , avg.value, .desc = TRUE)), stat = "identity", 
+           colour = "white", size = 1.05, alpha = .6) +  
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_continuous(limits = c(.5,1.5)) + 
+  coord_flip() +
+  scale_fill_brewer(palette(mypalette)) +
+  geom_text(data = portland, aes(x = x, y = y, label = y.label),
+             colour = "black", check_overlap = TRUE) +
+  guides(fill=guide_legend(title="Top Species", nrow = 2)) + 
+  theme(axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank(),
+        axis.text = element_blank(),legend.position = "bottom",
+        text = element_text(size = 8, family = "Roboto Condensed"),
+        aspect.ratio = .2)
+
+```
+
+
+## Treemaps {.tabset}
+
+### Gear and Species
+
+Tree map built from avg. landings value across the baseline period. I have concerns that the species sub-group is TMI and complicates our bar chart.
+
+**Data**: CFDERS 2011 - 2015 
+
+
+```{r treemap gear spp, echo=FALSE, warning=FALSE}
+ggplot(gear_spp_input, aes(area = value / 1000, label = spp_top, fill =value,
+                           subgroup = gear_type)) +
+    geom_treemap(alpha = .8, colour = "white") +
+  geom_treemap_text(colour = "white", place = "center", reflow = T, alpha = .6) +
+ geom_treemap_subgroup_border(colour = "white", alpha = .8) + 
+ geom_treemap_subgroup_text(place = "topleft", alpha = 0.8, colour =
+                               "black") +
+  scale_fill_gradient(low = gmri.blue, high = gmri.gray, labels = scales::dollar) +
+  labs(fill = "Landings Value (Thousands of $)") +
+#  ggtitle("Avg. Landings Value by Gear Type and Species",
+ #         subtitle = "Computed using 2011 - 2015 Values / Area Proportional to Value") +
+  theme_tufte() + 
+  theme(legend.position = "bottom",
+        text = element_text(family = "Roboto Condensed"))
+```
+
+### Just Gear 
+
+Tree map built from avg. landings value across the baseline period. Species subgroup is excluded here. 
+
+**Data**: CFDERS 2011 - 2015 
+
+```{r treemap just gear, echo=FALSE, warning=FALSE}
+
+ggplot(gear_spp_input %>% ungroup() %>% group_by(gear_type) %>% 
+         summarise(value = sum(value)/10), aes(area = value, label = gear_type, fill =value )) + 
+  geom_treemap(alpha = .8, colour = "white") +
+  geom_treemap_text(colour = "white") + 
+  scale_fill_gradient(low = gmri.blue, high = gmri.gray, labels = scales::dollar) +
+  guides(fill=guide_legend(title="Share of Landings")) +
+  theme_tufte() + 
+  theme(legend.position = "bottom",
+        text = element_text(family = "Roboto Condensed"),
+        aspect.ratio = .8)
+
+```
+
+## Scatterplot 
+
+Scatter plot with catch diversity and log transformed Avg. Value. I have excluded axis values here. 
+
+```{r scatterplot, echo=FALSE, warning=FALSE}
+
+value.div <-  port.value.div(raw.landings) %>% filter(avg.total.value > 1000000)
+
+data.filt <- value.div %>% filter(port_tidy == "PORTLAND_ME") %>% 
+    left_join(., nice.names, by = c("port_tidy" = "port.tidy"))
+
+ggplot() + 
+  geom_point(data = value.div, aes(x = log(avg.total.value), y = avg.index),
+             color = gmri.gray, alpha = .6, size = 1) +
+  geom_point(data = data.filt, aes(x = log(avg.total.value), y = avg.index),
+             color = gmri.blue, size = 2.5) +
+  geom_text(data = data.filt, aes(x = log(avg.total.value), y = avg.index, label = port.nice),
+            hjust = 0, nudge_x = .13) + 
+  ylab("Catch Diversity") +
+  xlab("Avg. Total Value ") +
+    theme(aspect.ratio = .26,
+          text = element_text(size = 10, family = "Roboto Condensed"),
+          axis.ticks = element_blank(), axis.text = element_blank())
+
+
+```
+
+
+
+## Map
+
+Basic baseman. Palette has been reversed. 
+
+**Data**:  LANPORT / GAR 82_2015 + default GGMAP categories 
+
+```{r map, echo=FALSE, warning=FALSE}
+ggplot() +
+  geom_polygon(data = state_data, aes(x=long, y=lat, group=state_group),
+               alpha = .15, colour = "white")+ 
+  geom_polygon(data = cnty_input_data, aes(x = long, y = lat, group = group,
+                                           fill = value), alpha = .5, colour = "white") +
+  geom_point(data = coca_port_list, aes(lon, lat),
+             size = 2, color = "red") +
+  ggrepel::geom_text_repel(data = coca_port_list, aes(x=lon, y=lat, label=port.nice),
+                           direction = "both",
+                           hjust = 1,
+                           nudge_x = 10,
+                           nudge_y = -1,
+                           size = 2.7, #size of box?
+                           segment.size = .3) +
+  scale_fill_gradient(low = gmri.blue, high = gmri.gray) +
+  coord_fixed(1.3, xlim = c(-74, -66.5), ylim =c(44.7, 40.65)) + 
+  theme_map() + 
+  theme(legend.position = "none",
+        text = element_text(family = "Roboto Condensed"))
+```
+

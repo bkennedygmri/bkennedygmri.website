@@ -7,6 +7,8 @@ navbar:
       href: index.html
     - text: "COCA Map Iterations"
       href: comm_report.html
+    - text: "Community Report: Page 1" 
+      href: comm_page1.html
     - text: "Community Report Figures" 
       href: comm_figures.html
     - text: "Lobster Trends"
